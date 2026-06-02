@@ -29,11 +29,17 @@ var accessMatrix = map[string]map[string]string{
 	},
 }
 
-type Service struct {
-	repo *Repository
+type RepositoryInterface interface {
+	Create(record *models.VaultRecord) error
+	FindByToken(token string) (*models.VaultRecord, error)
+	SoftDelete(token string) error
 }
 
-func NewService(repo *Repository) *Service {
+type Service struct {
+	repo RepositoryInterface
+}
+
+func NewService(repo RepositoryInterface) *Service {
 	return &Service{repo: repo}
 }
 
