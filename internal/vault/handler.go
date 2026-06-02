@@ -3,16 +3,18 @@ package vault
 import (
 	"net/http"
 
+	"github.com/anandudevops/aegis/internal/audit"
 	"github.com/anandudevops/aegis/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	svc *Service
+	svc      *Service
+	auditSvc *audit.Service
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, auditSvc: auditSvc}
 }
 
 func (h *Handler) Tokenize(c *gin.Context) {
@@ -28,10 +30,12 @@ func (h *Handler) Tokenize(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	record, err := h.svc.Tokenize(req.FieldType, req.Value, userID.(string))
 	if err != nil {
+		h.auditSvc.Log(userID.(string), "STORE", "", req.FieldType, "", c.ClientIP(), false, err.Error())
 		response.Error(c, http.StatusInternalServerError, "tokenization failed")
 		return
 	}
 
+	h.auditSvc.Log(userID.(string), "STORE", record.Token, record.FieldType, "FULL", c.ClientIP(), true, "")
 	response.Success(c, http.StatusCreated, gin.H{
 		"token":      record.Token,
 		"field_type": record.FieldType,
@@ -48,9 +52,16 @@ func (h *Handler) Detokenize(c *gin.Context) {
 		return
 	}
 
+	userID, _ := c.Get("user_id")
 	role, _ := c.Get("role")
 	value, accessLevel, err := h.svc.Detokenize(req.Token, role.(string))
 	if err != nil {
+		fieldType := ""
+		if rec, fetchErr := h.svc.GetMetadata(req.Token); fetchErr == nil {
+			fieldType = rec.FieldType
+		}
+		h.auditSvc.Log(userID.(string), "DETOKENIZE", req.Token, fieldType, accessLevel, c.ClientIP(), false, err.Error())
+
 		if accessLevel == "DENIED" {
 			response.Error(c, http.StatusForbidden, "access denied for this field type")
 		} else {
@@ -60,6 +71,8 @@ func (h *Handler) Detokenize(c *gin.Context) {
 	}
 
 	record, _ := h.svc.GetMetadata(req.Token)
+	h.auditSvc.Log(userID.(string), "DETOKENIZE", req.Token, record.FieldType, accessLevel, c.ClientIP(), true, "")
+
 	response.Success(c, http.StatusOK, gin.H{
 		"token":        req.Token,
 		"field_type":   record.FieldType,
@@ -70,10 +83,21 @@ func (h *Handler) Detokenize(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	token := c.Param("token")
+	userID, _ := c.Get("user_id")
+
+	record, err := h.svc.GetMetadata(token)
+	fieldType := ""
+	if err == nil {
+		fieldType = record.FieldType
+	}
+
 	if err := h.svc.Delete(token); err != nil {
+		h.auditSvc.Log(userID.(string), "DELETE", token, fieldType, "", c.ClientIP(), false, err.Error())
 		response.Error(c, http.StatusNotFound, err.Error())
 		return
 	}
+
+	h.auditSvc.Log(userID.(string), "DELETE", token, fieldType, "FULL", c.ClientIP(), true, "")
 	response.Success(c, http.StatusOK, gin.H{"message": "record deleted"})
 }
 

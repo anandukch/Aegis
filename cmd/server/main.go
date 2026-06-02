@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/anandudevops/aegis/internal/audit"
 	"github.com/anandudevops/aegis/internal/auth"
 	"github.com/anandudevops/aegis/internal/db"
 	"github.com/anandudevops/aegis/internal/middleware"
@@ -28,6 +29,10 @@ func main() {
 		log.Fatalf("db connect: %v", err)
 	}
 
+	auditRepo := audit.NewRepository(database)
+	auditSvc := audit.NewService(auditRepo)
+	auditHandler := audit.NewHandler(auditSvc)
+
 	authRepo := auth.NewRepository(database)
 	authSvc := auth.NewService(authRepo)
 	authHandler := auth.NewHandler(authSvc)
@@ -35,7 +40,7 @@ func main() {
 
 	vaultRepo := vault.NewRepository(database)
 	vaultSvc := vault.NewService(vaultRepo)
-	vaultHandler := vault.NewHandler(vaultSvc)
+	vaultHandler := vault.NewHandler(vaultSvc, auditSvc)
 
 	if os.Getenv("APP_ENV") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -66,6 +71,9 @@ func main() {
 
 		api.GET("/roles", rbacHandler.GetRoles)
 		api.POST("/users/:id/role", middleware.RequireRole("ADMIN"), rbacHandler.AssignRole)
+
+		api.GET("/audit/logs", middleware.RequireRole("ADMIN"), auditHandler.GetLogs)
+		api.GET("/audit/logs/:token", middleware.RequireRole("ADMIN"), auditHandler.GetLogsByToken)
 	}
 
 	port := os.Getenv("APP_PORT")
