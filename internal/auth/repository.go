@@ -2,6 +2,7 @@ package auth
 
 import (
 	"github.com/anandudevops/aegis/internal/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -23,4 +24,8 @@ func (r *Repository) FindByUsername(username string) (*models.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *Repository) UpdateRole(userID uuid.UUID, role string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("role", role).Error
 }

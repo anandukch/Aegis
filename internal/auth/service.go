@@ -13,8 +13,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var ValidRoles = map[string]bool{
+	"ADMIN":   true,
+	"ANALYST": true,
+	"SERVICE": true,
+	"VIEWER":  true,
+}
+
 type Claims struct {
 	UserID string `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -26,7 +34,11 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) Register(username, password string) (*models.User, error) {
+func (s *Service) Register(username, password, role string) (*models.User, error) {
+	if !ValidRoles[role] {
+		role = "VIEWER"
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -36,6 +48,7 @@ func (s *Service) Register(username, password string) (*models.User, error) {
 		ID:           uuid.New(),
 		Username:     username,
 		PasswordHash: string(hash),
+		Role:         role,
 	}
 
 	if err := s.repo.Create(user); err != nil {
@@ -61,6 +74,13 @@ func (s *Service) Login(username, password string) (string, *models.User, error)
 	return token, user, nil
 }
 
+func (s *Service) AssignRole(targetUserID uuid.UUID, role string) error {
+	if !ValidRoles[role] {
+		return fmt.Errorf("invalid role: %s", role)
+	}
+	return s.repo.UpdateRole(targetUserID, role)
+}
+
 func issueJWT(user *models.User) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	expiryHours, _ := strconv.Atoi(os.Getenv("JWT_EXPIRY_HOURS"))
@@ -70,6 +90,7 @@ func issueJWT(user *models.User) (string, error) {
 
 	claims := Claims{
 		UserID: user.ID.String(),
+		Role:   user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiryHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

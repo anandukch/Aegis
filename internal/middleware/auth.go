@@ -12,6 +12,7 @@ import (
 
 type Claims struct {
 	UserID string `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -41,6 +42,23 @@ func Auth() gin.HandlerFunc {
 		}
 
 		c.Set("user_id", claims.UserID)
+		c.Set("role", claims.Role)
+		c.Next()
+	}
+}
+
+func RequireRole(roles ...string) gin.HandlerFunc {
+	allowed := make(map[string]bool, len(roles))
+	for _, r := range roles {
+		allowed[r] = true
+	}
+	return func(c *gin.Context) {
+		role, _ := c.Get("role")
+		if !allowed[role.(string)] {
+			response.Error(c, http.StatusForbidden, "insufficient permissions")
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

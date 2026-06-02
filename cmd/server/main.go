@@ -9,6 +9,7 @@ import (
 	"github.com/anandudevops/aegis/internal/auth"
 	"github.com/anandudevops/aegis/internal/db"
 	"github.com/anandudevops/aegis/internal/middleware"
+	"github.com/anandudevops/aegis/internal/rbac"
 	"github.com/anandudevops/aegis/internal/vault"
 	"github.com/anandudevops/aegis/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,7 @@ func main() {
 	authRepo := auth.NewRepository(database)
 	authSvc := auth.NewService(authRepo)
 	authHandler := auth.NewHandler(authSvc)
+	rbacHandler := rbac.NewHandler(authSvc)
 
 	vaultRepo := vault.NewRepository(database)
 	vaultSvc := vault.NewService(vaultRepo)
@@ -59,7 +61,11 @@ func main() {
 	{
 		api.POST("/vault/tokenize", vaultHandler.Tokenize)
 		api.POST("/vault/detokenize", vaultHandler.Detokenize)
+		api.DELETE("/vault/:token", middleware.RequireRole("ADMIN"), vaultHandler.Delete)
 		api.GET("/vault/:token/metadata", vaultHandler.GetMetadata)
+
+		api.GET("/roles", rbacHandler.GetRoles)
+		api.POST("/users/:id/role", middleware.RequireRole("ADMIN"), rbacHandler.AssignRole)
 	}
 
 	port := os.Getenv("APP_PORT")

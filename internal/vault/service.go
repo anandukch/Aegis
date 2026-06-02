@@ -10,6 +10,25 @@ import (
 	"github.com/google/uuid"
 )
 
+var accessMatrix = map[string]map[string]string{
+	"ADMIN": {
+		"": "FULL",
+	},
+	"ANALYST": {
+		"email":       "MASKED",
+		"name":        "MASKED",
+		"card_number": "DENIED",
+		"":            "MASKED",
+	},
+	"SERVICE": {
+		"card_number": "FULL",
+		"":            "MASKED",
+	},
+	"VIEWER": {
+		"": "MASKED",
+	},
+}
+
 type Service struct {
 	repo *Repository
 }
@@ -49,27 +68,50 @@ func (s *Service) Tokenize(fieldType, value, createdByID string) (*models.VaultR
 	return record, nil
 }
 
-func (s *Service) Detokenize(token string) (string, *models.VaultRecord, error) {
+func (s *Service) Detokenize(token, role string) (value, accessLevel string, err error) {
 	record, err := s.repo.FindByToken(token)
 	if err != nil {
-		return "", nil, err
+		return "", "", err
+	}
+
+	accessLevel = resolveAccess(role, record.FieldType)
+	if accessLevel == "DENIED" {
+		return "", "DENIED", errors.New("access denied for this field type")
 	}
 
 	key, err := masterKey()
 	if err != nil {
-		return "", nil, err
+		return "", "", err
 	}
 
 	plaintext, err := crypto.Decrypt(record.EncValue, record.Nonce, key)
 	if err != nil {
-		return "", nil, fmt.Errorf("decrypt: %w", err)
+		return "", "", fmt.Errorf("decrypt: %w", err)
 	}
 
-	return plaintext, record, nil
+	if accessLevel == "MASKED" {
+		plaintext = crypto.MaskValue(plaintext, record.FieldType)
+	}
+	return plaintext, accessLevel, nil
+}
+
+func (s *Service) Delete(token string) error {
+	return s.repo.SoftDelete(token)
 }
 
 func (s *Service) GetMetadata(token string) (*models.VaultRecord, error) {
 	return s.repo.FindByToken(token)
+}
+
+func resolveAccess(role, fieldType string) string {
+	roleMap, ok := accessMatrix[role]
+	if !ok {
+		return "DENIED"
+	}
+	if level, ok := roleMap[fieldType]; ok {
+		return level
+	}
+	return roleMap[""]
 }
 
 func masterKey() ([]byte, error) {

@@ -48,17 +48,33 @@ func (h *Handler) Detokenize(c *gin.Context) {
 		return
 	}
 
-	value, record, err := h.svc.Detokenize(req.Token)
+	role, _ := c.Get("role")
+	value, accessLevel, err := h.svc.Detokenize(req.Token, role.(string))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		if accessLevel == "DENIED" {
+			response.Error(c, http.StatusForbidden, "access denied for this field type")
+		} else {
+			response.Error(c, http.StatusNotFound, err.Error())
+		}
 		return
 	}
 
+	record, _ := h.svc.GetMetadata(req.Token)
 	response.Success(c, http.StatusOK, gin.H{
-		"token":      req.Token,
-		"field_type": record.FieldType,
-		"value":      value,
+		"token":        req.Token,
+		"field_type":   record.FieldType,
+		"value":        value,
+		"access_level": accessLevel,
 	})
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	token := c.Param("token")
+	if err := h.svc.Delete(token); err != nil {
+		response.Error(c, http.StatusNotFound, err.Error())
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{"message": "record deleted"})
 }
 
 func (h *Handler) GetMetadata(c *gin.Context) {

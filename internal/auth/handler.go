@@ -19,18 +19,19 @@ func (h *Handler) Register(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required,min=8"`
+		Role     string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	user, err := h.svc.Register(req.Username, req.Password)
+	user, err := h.svc.Register(req.Username, req.Password, req.Role)
 	if err != nil {
 		response.Error(c, http.StatusConflict, "username already exists")
 		return
 	}
-	response.Success(c, http.StatusCreated, gin.H{"id": user.ID, "username": user.Username})
+	response.Success(c, http.StatusCreated, gin.H{"id": user.ID, "username": user.Username, "role": user.Role})
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -50,6 +51,6 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 	response.Success(c, http.StatusOK, gin.H{
 		"token": token,
-		"user":  gin.H{"id": user.ID, "username": user.Username},
+		"user":  gin.H{"id": user.ID, "username": user.Username, "role": user.Role},
 	})
 }
