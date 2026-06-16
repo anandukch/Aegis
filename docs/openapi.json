@@ -1,0 +1,665 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Aegis API",
+    "description": "PII Data Privacy Vault REST API. Tokenize sensitive values, control access by role, and audit every read.",
+    "version": "1.0.0",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/anandukch/aegis"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development"
+    }
+  ],
+  "tags": [
+    { "name": "health", "description": "Service health" },
+    { "name": "auth", "description": "Registration and login" },
+    { "name": "vault", "description": "Tokenize and detokenize PII" },
+    { "name": "rbac", "description": "Roles and permissions" },
+    { "name": "audit", "description": "Audit log (ADMIN only)" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/HealthData" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Register a new user",
+        "description": "Create a user account. Invalid roles default to VIEWER.",
+        "operationId": "register",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/UserResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Login",
+        "description": "Authenticate and receive a JWT for protected endpoints.",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/LoginResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/vault/tokenize": {
+      "post": {
+        "tags": ["vault"],
+        "summary": "Tokenize PII",
+        "description": "Encrypt and store a sensitive value. Returns an opaque token.",
+        "operationId": "tokenize",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TokenizeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/TokenizeResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/vault/detokenize": {
+      "post": {
+        "tags": ["vault"],
+        "summary": "Detokenize PII",
+        "description": "Retrieve a value by token. Output may be full or masked based on role.",
+        "operationId": "detokenize",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DetokenizeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Value retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/DetokenizeResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/vault/{token}": {
+      "delete": {
+        "tags": ["vault"],
+        "summary": "Delete a vault record",
+        "description": "Soft-delete a tokenized record. ADMIN only.",
+        "operationId": "deleteVaultRecord",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "tok_7f3a9c1e-4b2d-4f8a-9c1e-7f3a9c1e4b2d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/MessageResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/vault/{token}/metadata": {
+      "get": {
+        "tags": ["vault"],
+        "summary": "Get vault metadata",
+        "description": "Return token metadata without the raw value.",
+        "operationId": "getVaultMetadata",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "tok_7f3a9c1e-4b2d-4f8a-9c1e-7f3a9c1e4b2d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metadata returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/VaultMetadataResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "tags": ["rbac"],
+        "summary": "List role permissions",
+        "description": "Return the permission matrix for all roles.",
+        "operationId": "getRoles",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Role matrix",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessEnvelope" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/users/{id}/role": {
+      "post": {
+        "tags": ["rbac"],
+        "summary": "Assign a user role",
+        "description": "Update a user's role. ADMIN only.",
+        "operationId": "assignRole",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AssignRoleRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/MessageResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/audit/logs": {
+      "get": {
+        "tags": ["audit"],
+        "summary": "List audit logs",
+        "description": "Paginated audit log. ADMIN only.",
+        "operationId": "getAuditLogs",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1, "minimum": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/AuditLogsResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/audit/logs/{token}": {
+      "get": {
+        "tags": ["audit"],
+        "summary": "Audit logs for a token",
+        "description": "Return all audit entries for a specific token. ADMIN only.",
+        "operationId": "getAuditLogsByToken",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "tok_7f3a9c1e-4b2d-4f8a-9c1e-7f3a9c1e4b2d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs for token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/AuditLogsByTokenResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT from POST /api/v1/auth/login"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid JWT",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient role permissions",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict (e.g. username already exists)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "SuccessEnvelope": {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": { "type": "object" }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["success", "error"],
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": { "type": "string", "example": "invalid credentials" }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "alice" },
+          "password": { "type": "string", "minLength": 8, "example": "password123" },
+          "role": {
+            "type": "string",
+            "enum": ["ADMIN", "ANALYST", "SERVICE", "VIEWER"],
+            "example": "ADMIN"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "alice" },
+          "password": { "type": "string", "example": "password123" }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "username": { "type": "string" },
+          "role": { "type": "string" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "user": { "$ref": "#/components/schemas/UserResponse" }
+        }
+      },
+      "TokenizeRequest": {
+        "type": "object",
+        "required": ["field_type", "value"],
+        "properties": {
+          "field_type": {
+            "type": "string",
+            "enum": ["email", "phone", "card_number", "aadhaar", "pan", "name", "dob"],
+            "example": "email"
+          },
+          "value": { "type": "string", "example": "john@example.com" }
+        }
+      },
+      "TokenizeResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "example": "tok_7f3a9c1e-4b2d-4f8a-9c1e-7f3a9c1e4b2d" },
+          "field_type": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DetokenizeRequest": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": { "type": "string", "example": "tok_7f3a9c1e-4b2d-4f8a-9c1e-7f3a9c1e4b2d" }
+        }
+      },
+      "DetokenizeResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "field_type": { "type": "string" },
+          "value": { "type": "string" },
+          "access_level": { "type": "string", "enum": ["FULL", "MASKED"] }
+        }
+      },
+      "VaultMetadataResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "field_type": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "created_by": { "type": "string", "format": "uuid" }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "example": "record deleted" }
+        }
+      },
+      "AssignRoleRequest": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["ADMIN", "ANALYST", "SERVICE", "VIEWER"],
+            "example": "ANALYST"
+          }
+        }
+      },
+      "AuditLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "actor_id": { "type": "string", "format": "uuid", "nullable": true },
+          "action": { "type": "string", "enum": ["STORE", "DETOKENIZE", "DELETE", "KEY_ROTATION"] },
+          "token": { "type": "string" },
+          "field_type": { "type": "string" },
+          "access_level": { "type": "string" },
+          "ip_address": { "type": "string" },
+          "success": { "type": "boolean" },
+          "failure_reason": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuditLogsResponse": {
+        "type": "object",
+        "properties": {
+          "logs": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuditLogEntry" }
+          },
+          "total": { "type": "integer", "example": 42 },
+          "page": { "type": "integer", "example": 1 },
+          "limit": { "type": "integer", "example": 20 }
+        }
+      },
+      "AuditLogsByTokenResponse": {
+        "type": "object",
+        "properties": {
+          "logs": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuditLogEntry" }
+          }
+        }
+      },
+      "HealthData": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "version": { "type": "string", "example": "1.0.0" },
+          "uptime": { "type": "string", "example": "42s" }
+        }
+      }
+    }
+  }
+}

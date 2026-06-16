@@ -44,6 +44,8 @@ Full step-by-step guide with curl examples for every endpoint → **[docs/USAGE_
 
 API reference → **[docs/API.md](docs/API.md)**
 
+Swagger UI (GitHub Pages) → **https://anandukch.github.io/aegis/swagger.html**
+
 ---
 
 ## RBAC Access Matrix

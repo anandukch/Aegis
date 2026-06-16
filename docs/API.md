@@ -2,6 +2,8 @@
 
 Base URL: `http://localhost:8080`
 
+**Interactive API docs (GitHub Pages):** [Swagger UI](https://anandukch.github.io/aegis/swagger.html) · source: [`docs/openapi.json`](openapi.json)
+
 All protected endpoints require `Authorization: Bearer <JWT>` header.
 
 ---
